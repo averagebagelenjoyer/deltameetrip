@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html>
+
+<script>
+    /* ========= CONFIG ========= */
+    const CONFIG = {
+        NICKNAME: "hyrgtefrewdfrgtrhytju"
+    };
+</script>
+
+<head>
+    <meta charset="UTF-8">
+    <title>about:blank</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #222222;
+            --text-color: #ffffff;
+            --accent-color: #000000;
+            --link-color: #4372e9;
+            font-size: 30px;
+        }
+
+        body.light {
+            --bg-color: #ffffff;
+            --text-color: #000000;
+            --accent-color: #3c3c3c;
+            --link-color: #0000FF;
+        }
+
+        body.modernDark {
+            --bg-color: #222222;
+            --text-color: #e0e0e0;
+            --accent-color: #1e1e1e;
+        }
+
+        body.contrast {
+            --bg-color: #000000;
+            --text-color: #ffffff;
+            --accent-color: #ffff00;
+            --link-color: #00ffff;
+        }
+
+        body.cat {
+            background-image: url("https://cataas.com/cat/gif?type=square");
+            background-size: 100vh;
+            background-position-x: center;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: sans-serif;
+            max-width: 70%;
+            margin: auto;
+            border: 1px solid var(--accent);
+        }
+
+        #chat {
+            height: 700px;
+            width: 100%;
+            overflow-y: auto;
+            border: 1px solid var(--accent-color);
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            box-sizing: border-box;
+            gap: 8px;
+            font-family: monospace;
+        }
+
+        .msg-row {
+            padding: 5px 10px;
+            border-radius: 8px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .msg-you {
+            background: rgba(0, 255, 133, 0.1);
+            align-self: flex-end;
+            color: #00ff85;
+        }
+
+        .msg-peer {
+            background: rgba(122, 162, 247, 0.1);
+            align-self: flex-start;
+            color: #7aa2f7;
+        }
+
+        .msg-system {
+            font-style: italic;
+            opacity: 0.6;
+            align-self: center;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        h1 {
+            font-weight: normal;
+        }
+
+        button,
+        input,
+        select,
+        textarea {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--accent-color);
+            font-size: 30px;
+        }
+
+        #themeSelect {
+            position: absolute;
+            left: 5px;
+            top: 5px;
+            font-size: 20px;
+        }
+
+        #msg {
+            font-family: monospace;
+            width: 70%;
+        }
+
+        a {
+            color: var(--link-color);
+        }
+
+        .dot {
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            display: inline-block;
+            transition: background-color 0.3s ease;
+            position: absolute;
+            right: 10px;
+            top: 10px;
+        }
+
+        .online {
+            background-color: #4CAF50;
+            box-shadow: 0 0 0 rgba(76, 175, 80, 0.4);
+            animation: pulse-green 3s infinite;
+        }
+
+        .offline {
+            background-color: #f44336;
+        }
+
+        @keyframes pulse-green {
+            0% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
+            }
+
+            70% {
+                transform: scale(1);
+                box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
+            }
+
+            100% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <select id="themeSelect">
+        <option value="dark">Dark Mode</option>
+        <option value="modernDark">Modern Dark</option>
+        <option value="light">Light Mode</option>
+        <option value="contrast">High Contrast</option>
+        <option value="cat">🐱 (requires reload)</option>
+    </select>
+
+    <h1>Messaging And Telecommunications Hyperapp</h1>
+
+    <div>Your ID: <span id="myId">...</span></div>
+
+    <hr>
+
+    <div id="chat"></div><br>
+    <input id="msg" placeholder="Message..." />
+    <button id="send" onclick="send();">Send</button>
+    <button onclick="document.getElementById('chat').innerHTML = '';">Clear</button>
+    <button onclick="disconnect();">Disconnect</button>
+
+    <br>
+
+    <input type="file" accept="image/*" capture="environment" id="fileInput" />
+    <button onclick="sendFile();">📁 Send Photo</button>
+
+    <span id="connection-dot" class="dot offline"></span>
+
+    <script>
+        const peer = new Peer(CONFIG.NICKNAME);
+        let conn;
+        let originalTitle = document.title;
+        let flashInterval = null;
+        let pongTimeout = null;
+        let heartbeatInterval = null;
+
+        function updateStatusUI(isOnline) {
+            const dot = document.getElementById("connection-dot");
+            if (!dot) return;
+
+            dot.className = isOnline ? "dot online" : "dot offline";
+        }
+
+        peer.on("open", id => {
+            document.getElementById("myId").innerText = id;
+        });
+
+        peer.on("connection", c => {
+            conn = c;
+            setup();
+        });
+
+        peer.on("error", e => {
+            if (e.type === "unavailable-id") {
+                log(`ID "${CONFIG.NICKNAME}" is already in use`);
+            }
+        });
+
+        function connect(id) {
+            disconnect();
+
+            conn = peer.connect(id);
+            conn.on("open", setup);
+        }
+
+        function setup() {
+            log("connected to: " + conn?.peer);
+            updateStatusUI(true);
+            startHeartbeat();
+
+            conn.on("data", data => {
+                if (data === "__ping__") {
+                    conn.send("__pong__");
+                    return;
+                }
+
+                if (data === "__pong__") {
+                    clearTimeout(pongTimeout);
+                    updateStatusUI(true);
+                    return;
+                }
+
+                if (data && data.fileData) {
+                    const name = data.fileName || "file";
+
+                    try {
+                        const finalBlob = new Blob([data.fileData], { type: data.fileType || 'application/octet-stream' });
+                        const url = URL.createObjectURL(finalBlob);
+                        log(`📎 Received: <a href="${url}" download="${name}">${name}</a>`);
+                    } catch (e) {
+                        console.error("Blob creation failed:", e);
+                        log("❌ Failed to process incoming file.");
+                    }
+                } else {
+                    log(`_${conn.peer}:_ ${data}`, "peer");
+                }
+            });
+
+            conn.on("close", () => {
+                log(`${conn.peer} left.`);
+                stopHeartbeat();
+                conn = null;
+            });
+        };
+
+        function startHeartbeat() {
+            stopHeartbeat();
+            heartbeatInterval = setInterval(() => {
+                if (conn && conn.open) {
+                    conn.send("__ping__");
+
+                    pongTimeout = setTimeout(() => {
+                        updateStatusUI(false);
+                    }, 3000);
+                }
+            }, 5000);
+        }
+
+        function stopHeartbeat() {
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
+            updateStatusUI(false);
+        }
+
+        function send() {
+            const input = document.getElementById("msg");
+            if (!input.value) return;
+            conn.send(input.value);
+            log(input.value, "you");
+            input.value = "";
+        }
+
+        function log(msg, type = "system") {
+            const chat = document.getElementById("chat");
+            const div = document.createElement("div");
+            div.className = `msg-row msg-${type}`;
+            div.title = new Date().toLocaleTimeString();
+
+            let formattedMsg;
+            if (msg.startsWith("📎")) {
+                formattedMsg = msg;
+            } else {
+                let safeMsg = msg.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                formattedMsg = safeMsg.replace(/(https?:\/\/[^\s]+)/g, (url) => {
+                    return `<a href="${url}" target="_blank" style="color: #7aa2f7; text-decoration: underline;">${url}</a>`
+                });
+                formattedMsg = formattedMsg.replace(/\*(.*?)\*/g, "<b>$1</b>");
+                formattedMsg = formattedMsg.replace(/_(.*?)_/g, "<i>$1</i>");
+                formattedMsg = formattedMsg.replace(/~(.*?)~/g, "<strike>$1</strike>");
+                formattedMsg = formattedMsg.replace(/`(.*?)`/g, "<code style='background: rgba(255,255,255,0.1); padding: 2px 4px;'>$1</code>");
+            }
+
+            div.innerHTML = formattedMsg;
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        const input = document.getElementById("msg");
+        input.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") {
+                document.getElementById("send").click();
+            }
+        });
+
+        const themeSelect = document.getElementById("themeSelect");
+
+        themeSelect.addEventListener("change", (e) => {
+            const selectedTheme = e.target.value;
+
+            document.body.className = selectedTheme;
+
+            localStorage.setItem("theme", selectedTheme);
+        });
+
+        const savedTheme = localStorage.getItem("theme");
+        if (savedTheme) {
+            document.body.className = savedTheme;
+            themeSelect.value = savedTheme;
+        }
+
+        window.onunload = (e) => {
+            disconnect();
+        };
+
+        async function sendFile() {
+            const fileInput = document.getElementById("fileInput");
+            const file = fileInput.files[0];
+            if (!file || !conn) return;
+
+            const buffer = await file.arrayBuffer();
+
+            conn.send({
+                fileName: file.name,
+                fileData: buffer
+            });
+
+            log(`Sending file: ${file.name}...`);
+            fileInput.value = "";
+        }
+
+        function disconnect() {
+            if (conn) conn.close();
+        }
+    </script>
+
+</body>
+
+</html>
